@@ -1,7 +1,7 @@
 ---
 title: "Data analysis assignment 2"
-author: "[add your name here]"
-date: "[add date here]"
+author: "Ryan Kennelly"
+date: "07.02.2020"
 output: github_document
 ---
 
@@ -24,9 +24,10 @@ We will work with three different tables: household roster from wave 8 (*h_egoal
 ```{r}
 library(tidyverse)
 # You need to complete the paths to these files on your computer.
-Egoalt8 <- read_tsv("...h_egoalt.tab")
-Stable <- read_tsv("...xwavedat.tab")
-Hh8 <- read_tsv("...h_hhresp.tab")
+Egoalt8 <- read_tsv("C:/Users/User/Documents/University/Year 2/Term 2/Data 3/data/UKDA-6614-tab/tab/ukhls_w8/h_egoalt.tab")
+Stable <- read_tsv("C:/Users/User/Documents/University/Year 2/Term 2/Data 3/data/UKDA-6614-tab/tab/ukhls_wx/xwavedat.tab")
+Hh8 <- read_tsv("C:/Users/User/Documents/University/Year 2/Term 2/Data 3/data/UKDA-6614-tab/tab/ukhls_w8/h_hhresp.tab")
+
 ```
 
 ## Filter household roster data (10 points)
@@ -37,8 +38,10 @@ First we want to select only pairs of individuals who are husbands and wives or 
 
 ```{r}
 Partners8 <- Egoalt8 %>%
-        filter(...) %>%
-        select(...)
+        filter(h_relationship_dv > 0 & h_relationship_dv < 3)  %>%
+        select(pidp, apidp, h_hidp, h_relationship_dv, h_sex, h_asex)
+table(Partners8$h_relationship_dv)
+
 ```
 
 Each couple now appears in the data twice: 1) with one partner as ego and the other as alter, 2) the other way round. Now we will only focus on heterosexual couples, and keep one observation per couple with women as egos and men as their alters.
@@ -46,9 +49,12 @@ Each couple now appears in the data twice: 1) with one partner as ego and the ot
 ```{r}
 Hetero8 <- Partners8 %>%
         # filter out same-sex couples
-        filter(...) %>%
+        filter(h_sex != h_asex) %>%
         # keep only one observation per couple with women as egos
-        filter(...)
+        filter(h_asex == 1)
+table(Hetero8$h_sex)
+table(Hetero8$h_asex)
+
 ```
 
 ## Recode data on ethnicity (10 points)
@@ -57,7 +63,8 @@ In this assignment we will explore ethnic endogamy, i.e. marriages and partnersh
 
 ```{r}
 Stable2 <- Stable %>%
-        select(...)
+        select(pidp, racel_dv)
+
 ```
 
 Let's code missing values on ethnicity (-9) as NA.
@@ -71,7 +78,12 @@ Now let us recode the variable on ethnicity into a new binary variable with the 
 
 ```{r}
 Stable2 <- Stable2 %>%
-        mutate(race = ...)
+        mutate(race = case_when(
+                between(racel_dv, 1, 4) ~ "White",
+                racel_dv > 4 ~ "non-White"
+        ))
+table(Stable2$race)
+
 ```
 
 ## Join data (30 points)
@@ -80,7 +92,8 @@ Now we want to join data from the household roster (*Hetero8*) and the data tabl
 
 ```{r}
 JoinedEthn <- Hetero8 %>%
-        ...
+        left_join(Stable2, by = "pidp")
+
 ```
 
 Let us rename the variables for ethnicity to clearly indicate that they refer to egos.
@@ -95,7 +108,8 @@ Now let us merge in the data on alter's ethnicity. Note that in this case the ke
 
 ```{r}
 JoinedEthn <- JoinedEthn %>%
-        ...
+        left_join(Stable2, by = c("apidp" = "pidp")) 
+
 ```
 
 Renaming the variables for alters.
@@ -113,9 +127,10 @@ Let us start by looking at the joint distribution of race (White vs. non-White) 
 ```{r}
 TableRace <- JoinedEthn %>%
         # filter out observations with missing data
-        filter(...) %>%
-        count(...)
+        filter(egoRace != "NA_character_" & alterRace != "NA_character_") %>%
+        count(egoRace, alterRace)
 TableRace
+
 ```
 
 Now calculate the following probabilities: 1) for a White woman to have a White partner, 2) for a White woman to have a non-White partner, 3) for a non-White woman to have a White partner, 4) for a non-White woman to have a non-White partner.
@@ -126,11 +141,13 @@ Of course, you can simply calculate these numbers manually. However, the code wi
 ```{r}
 TableRace %>%
         # group by ego's race to calculate sums
-        group_by(...) %>%
+        group_by(egoRace) %>%
         # create a new variable with the total number of women by race
-        mutate(...) %>%
+        mutate(wn = sum(n)
+        ) %>%
         # create a new variable with the required probabilities 
-        mutate(...)
+        mutate(perc = n / sum(n) * 100)
+
 ```
 
 ## Join with household data and calculate mean and median number of children by ethnic group (30 points)
@@ -141,4 +158,34 @@ TableRace %>%
 4) Write a short interpretation of your results. What could affect your findings?
 
 ```{r}
-...
+#1
+Joined1 <- JoinedEthn %>%
+        full_join(Hh8, by = "h_hidp") %>%
+        select(pidp, apidp, h_hidp, h_relationship_dv, h_sex, h_asex, egoRacel_dv, egoRace, alterRacel_dv, alterRace, h_nkids_dv)
+#2
+EndoEthno <- Joined1 %>%
+        filter(egoRacel_dv == 1 & alterRacel_dv == 1 | egoRacel_dv == 9 & alterRacel_dv == 9 | egoRacel_dv == 10 & 
+                    alterRacel_dv == 10) %>%
+        mutate(CouplesRace = case_when(
+                egoRacel_dv == 1 & alterRacel_dv == 1 ~ "White British",
+                egoRacel_dv == 9 & alterRacel_dv == 9 ~ "Indian",
+                egoRacel_dv == 10 & alterRacel_dv == 10 ~ "Pakistani"
+        ))
+#3
+Aggr1 <- EndoEthno %>%
+  select(CouplesRace, h_nkids_dv) %>%
+        group_by(CouplesRace) %>%
+  summarise(
+    MeanofChildren = mean(h_nkids_dv, na.rm = TRUE),
+    MedianofChildren = median(h_nkids_dv, na.rm = TRUE)
+  )
+  Aggr1
+ 
+  
+```
+Findings:
+when observing white British respondents in table Aggr1 it can be observed that the mean number of children per couple is less than 1 which is impossible in this case, this is due to a large portion of the respondants having 0 children which is also reinforced by the median displaying 0 thus skewing the data. From this it can be said that White British couples are far less likely to have any children than Indian or Pakistani who show means at 1 (2dp) and 1.81 respectivly. 
+The Pakistani respondents are most likely to have over one child per household whith the mean displaying 1.81(2dp) and 2 in the median. 
+Indian respondents are most likely to have 1 child per household. 
+However the lage number of responses that = 0 may have effected all three race groupings so it would be worth checking the number of 0's per race and posibly removing them and comparing both tables.
+
